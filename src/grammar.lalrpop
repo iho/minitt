@@ -21,16 +21,16 @@ Branch: Expression = {
 Name:        String = { r"[a-zA-Z_][a-zA-Z_\d]*" => <>.to_string() };
 Universe:    Expression  = { <n:r"\*[\d]+"> => Exression::Level(i64::from_str_radix(&n[1..],10).unwrap()), <n:r"\*"> => Expression::Level(0), };
 Variable:    Expression = { "var"<n:Name> => Exression::Var(n), };
-Unit:        Expression = { <l:"("> <e:Expression> <r:")"> => e, };
-// Sum:         Expression = {"Sum" "{" <b:Branch> "}" => Expression::Sum(b)}; 
+// Unit:        Expression = { <l:"("> <e:Expression> <r:")"> => e, };
+Sum:         Expression = {"Sum" "{" <b:Branch> "}" => Expression::Sum(b)}; 
 Split:       Expression = {"split" "{" <b:Branch> "}" => Expression::Split(b)}; 
-// Pi:          Expression = {"Pi" "{" <b:Branch> "}" => Expression::Pi(Typed::new(Pattern::Unit,e), e2)}; 
-Sigma:       Expression = {"Sigma" "{" <e:Expression> ":" <e2:Expression> "}" => Expression::Sum(Branch::from_iter(vec![Box::new(e),Box::new(e2)]))}; 
-Lambda:      Expression = { "Lambda" <l:"{"> <v:Name> <s:":"> <t:Expression> <r:"}"> <e:Expression> => Expression::Lambda(Pattern::Var(v),Box::new(t),Box::new(e)), };
-Application: Expression = { <l:Expression> <r:Expression> => Expression::Application(Box::new(l),Box::new(r)), };
-Pair:        Expression = { <l:Expression> "," <r:Expression> => Expression::Pair(Box::new(l),Box::new(r)), };
+Pi:          Expression = {"Pi" "{" <b:Branch> "}" => Expression::Pi(Typed::new(Pattern::Unit,e), e2)}; 
+Sigma:       Expression = {"Sigma" "{{" <e:Expression> ":" <e2:Expression> "}}" => Expression::Sum(Branch::from_iter(vec![Box::new(e),Box::new(e2)]))}; 
+Lambda:      Expression = { "Lambda" <l:"{{{"> <v:Name> <s:":"> <t:Expression>  ";" <e:Expression> "}}}"=> Expression::Lambda(Pattern::Var(v),Box::new(t),Box::new(e)), };
+// Application: Expression = { <l:Expression> <r:Expression> => Expression::Application(Box::new(l),Box::new(r)), };
+// Pair:        Expression = { <l:Expression> "," <r:Expression> => Expression::Pair(Box::new(l),Box::new(r)), };
 Constant:    Expression = { "const" <n:Name> "=" <e:Expression> => Expression::Constant(Pattern::Var(n),Box::new(e)), }; 
 Declaration: Expression = { "let" "rec"? <n:Name> "=" <e:Expression> => Expression::Constant(Pattern::Var(n),Box::new(e)), }; 
 
-pub BranchExpression:  Expression = { Variable,  Unit, Sigma,  };
-pub Expression: Expression = { Lambda, Application, Pair, Constant, Declaration, Split, Branch, Universe, Variable, Unit, Sigma, }; 
+pub BranchExpression:  Expression = { Variable,  Sigma,  };
+pub Expression: Expression = { Lambda, Constant, Declaration, Split, Branch, Universe, Variable,  Sigma, Pi, Sum, }; 
