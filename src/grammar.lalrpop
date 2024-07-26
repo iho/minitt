@@ -4,18 +4,18 @@ use crate::ast::Pattern;
 use crate::ast::Typed;
 grammar;
 
-// Branch: Expression = {
-//     <mut map:({<K> ":" <V>} ",")*> <kv:{<K> ":" <V>}?> => {
-//         let mut map = Branch::new();
-//         for (k, v) in map {
-//             map.insert(k, v);
-//         }
-//         if let Some((k, v)) = kv {
-//             map.insert(k, v);
-//         }
-//         map
-//     }
-// }
+Branch: Expression = { // (1)
+    <mut v:(<Variable>":"<Expression> ",")*> <e:(<Variable>":"<Expression>)?> => match e { // (2)
+        let mut map = Branch::new();
+        for (k, v) in v {
+            map.insert(k, v);
+        }
+        if let Some((k, v)) = e {
+            map.insert(k, v);
+        }
+        map
+    }
+};
 
 
 Name:        String = { r"[a-zA-Z_][a-zA-Z_\d]*" => <>.to_string() };
