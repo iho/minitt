@@ -1,0 +1,37 @@
+use crate::ast::Exression;
+use crate::ast::Branch;
+use crate::ast::Pattern;
+use crate::ast::Typed;
+grammar;
+
+// Branch: Expression = {
+//     <mut map:({<K> ":" <V>} ",")*> <kv:{<K> ":" <V>}?> => {
+//         let mut map = Branch::new();
+//         for (k, v) in map {
+//             map.insert(k, v);
+//         }
+//         if let Some((k, v)) = kv {
+//             map.insert(k, v);
+//         }
+//         map
+//     }
+// }
+
+
+Name:        String = { r"[a-zA-Z_][a-zA-Z_\d]*" => <>.to_string() };
+Universe:    Expression  = { <n:r"\*[\d]+"> => Exression::Level(i64::from_str_radix(&n[1..],10).unwrap()), <n:r"\*"> => Expression::Level(0), };
+Variable:    Expression = { <n:Name> => Exression::Var(n), };
+Unit:        Expression = { <l:"("> <e:Expression> <r:")"> => e, };
+Sum:         Expression = {"Sum" "{" <b:Branch> "}" => Expression::Sum(b)}; 
+Split:       Expression = {"split" "{" <b:Branch> "}" => Expression::Split(b)}; 
+Pi:          Expression = {"Pi" "{" <b:Branch> "}" => Expression::Pi(Typed::new(Pattern::Unit,e), e2)}; 
+Sigma:       Expression = {"Sigma" "{" <e:Expression> ":" <e2:Expression> "}" => Expression::Sum(Branch::from_iter(vec![Box::new(e),Box::new(e2)]))}; 
+Lambda:      Expression = { "Lambda" <l:"{"> <v:Name> <s:":"> <t:Expression> <r:"}"> <e:LExpr> => Expression::Lambda(Pattern::Var(v),Box::new(t),Box::new(e)), };
+LExpr:       Expression = { Variable, Universe, Unit, };
+Application: Expression = { <l:Expression> <r:LExpr> => Expression::Application(Box::new(l),Box::new(r)), };
+Pair:        Expression = { <l:Expression> "," <r:LExpr> => Expression::Pair(Box::new(l),Box::new(r)), };
+
+Constant:    Expression = { "const" <n:Name> "=" <e:Expression> => Expression::Constant(Pattern::Var(n),Box::new(e)), }; 
+Declaration: Expression = { "let" "rec"? <n:Name> "=" <e:Expression> => Expression::Constant(Pattern::Var(n),Box::new(e)), }; 
+
+pub Expression:  Expression = { Name, Application, Universe, Variable, Unit, Sum, Pi, Sigma,  LExpr, };
