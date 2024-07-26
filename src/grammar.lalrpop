@@ -5,7 +5,7 @@ use crate::ast::Typed;
 grammar;
 
 Branch: Expression = { 
-    <mut v:(<Variable>":"<Expression> ",")*> <e:(<Variable>":"<Expression>)?> =>{
+    <mut v:(<Variable>"=>"<Expression> "|")*> <e:(<Variable>"=>"<Expression>)?> =>{
         let mut map = Branch::new();
         for (k, v) in v {
             map.insert(k, v);
