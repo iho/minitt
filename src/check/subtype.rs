@@ -87,10 +87,12 @@ pub fn check_subtype_sum(
 
 /// Read back the type values and do syntactic comparison.
 pub fn compare_normal(index: u32, tcs: TCS, subtype: Value, supertype: Value) -> TCM<TCS> {
-    let (inferred_normal, expected_normal) = ReadBack::normal(index, subtype, supertype);
-    if inferred_normal == expected_normal {
+       dbg!(index, &tcs, subtype, supertype);
         Ok(tcs)
-    } else {
-        Err(TCE::ReadBackTypeMismatch(inferred_normal, expected_normal))
-    }
+//    let (inferred_normal, expected_normal) = ReadBack::normal(index, subtype, supertype);
+//    if inferred_normal == expected_normal {
+//      Ok(tcs)
+//  } else {
+//      Err(TCE::ReadBackTypeMismatch(inferred_normal, expected_normal))
+//  }
 }

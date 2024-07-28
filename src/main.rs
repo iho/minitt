@@ -14,5 +14,5 @@ fn print(s: &str) {
 }
 
 fn main() {
-   print("Σ (x:*), x");
+   print("Σ (x: *), (x)");
 }

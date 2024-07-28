@@ -45,8 +45,8 @@ use self::tcm::{TCM, TCS};
 use crate::ast::{Declaration, Expression, Value};
 
 /// `checkMain` in Mini-TT.
-pub fn check_main<'a>(expression: Expression) -> TCM<TCS<'a>> {
-    check_contextual(Default::default(), expression)
+pub fn check_main<'a>(expression: Expression) -> TCM<Value> {
+    check_infer_contextual(Default::default(), expression)
 }
 
 /// For REPL: check an expression under an existing context
