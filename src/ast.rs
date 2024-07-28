@@ -5,12 +5,14 @@ use either::Either;
 
 pub type Level = u32;
 
+
 /// `Exp` in Mini-TT.
 /// Expression language for Mini-TT.
 ///
 /// $M,\ N,\ A,\ B ::=$
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Expression {
+    Universe(i64),
     /// $0$
     Unit,
     /// $\textbf{1}$
@@ -63,6 +65,8 @@ pub enum Expression {
     /// `let bla` or `rec bla`
     Declaration(Box<Declaration>, Box<Self>),
 }
+
+pub type Per = Expression;
 
 /// Just a wrapper for a value but does not do `Eq` comparison.
 /// This is an implementation detail and should not be noticed much when reading the source code.
