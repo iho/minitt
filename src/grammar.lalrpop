@@ -1,36 +1,18 @@
-use crate::ast::Exression;
+use crate::ast::Expression;
+use crate::ast::Per;
 use crate::ast::Branch;
 use crate::ast::Pattern;
 use crate::ast::Typed;
+
 grammar;
 
-Branch: Expression = { 
-    <mut v:(<Variable>"=>"<BranchExpression> "|")*> <e:(<Variable>"=>"<BranchExpression>)?> =>{
-        let mut map = Branch::new();
-        for (k, v) in v {
-            map.insert(k, v);
-        }
-        if let Some((k, v)) = e {
-            map.insert(k, v);
-        }
-        map
-    }
-};
-
-
-Name:        String = { r"[a-zA-Z_][a-zA-Z_\d]*" => <>.to_string() };
-Universe:    Expression  = { <n:r"\*[\d]+"> => Exression::Level(i64::from_str_radix(&n[1..],10).unwrap()), <n:r"\*"> => Expression::Level(0), };
-Variable:    Expression = { "var"<n:Name> => Exression::Var(n), };
-// Unit:        Expression = { <l:"("> <e:Expression> <r:")"> => e, };
-Sum:         Expression = {"Sum" "{" <b:Branch> "}" => Expression::Sum(b)}; 
-Split:       Expression = {"split" "{" <b:Branch> "}" => Expression::Split(b)}; 
-Pi:          Expression = {"Pi" "{" <b:Branch> "}" => Expression::Pi(Typed::new(Pattern::Unit,e), e2)}; 
-Sigma:       Expression = {"Sigma" "{{" <e:Expression> ":" <e2:Expression> "}}" => Expression::Sum(Branch::from_iter(vec![Box::new(e),Box::new(e2)]))}; 
-Lambda:      Expression = { "Lambda" <l:"{{{"> <v:Name> <s:":"> <t:Expression>  ";" <e:Expression> "}}}"=> Expression::Lambda(Pattern::Var(v),Box::new(t),Box::new(e)), };
-// Application: Expression = { <l:Expression> <r:Expression> => Expression::Application(Box::new(l),Box::new(r)), };
-// Pair:        Expression = { <l:Expression> "," <r:Expression> => Expression::Pair(Box::new(l),Box::new(r)), };
-Constant:    Expression = { "const" <n:Name> "=" <e:Expression> => Expression::Constant(Pattern::Var(n),Box::new(e)), }; 
-Declaration: Expression = { "let" "rec"? <n:Name> "=" <e:Expression> => Expression::Constant(Pattern::Var(n),Box::new(e)), }; 
-
-pub BranchExpression:  Expression = { Variable,  Sigma,  };
-pub Expression: Expression = { Lambda, Constant, Declaration, Split, Branch, Universe, Variable,  Sigma, Pi, Sum, }; 
+Name:     String = { r"[a-zA-Z_][a-zA-Z_\d]*" => <>.to_string() };
+Universe:    Per = { <n:r"\*[\d]+"> => Per::Universe(i64::from_str_radix(&n[1..],10).unwrap()), <n:r"\*"> => Per::Universe(0), };
+Variable:    Per = { <n:Name> => Per::Var(n), };
+Unit:        Per = { <l:"("> <e:Expr> <r:")"> => e, };
+Lambda:      Per = { "λ" "(" <v:Name> <m:":"> <t:Expr> <c:","> <e:RExpr> => Per::Lambda(Pattern::Var(v),None,Box::new(e)), };
+Pi:          Per = { "Π" "(" <v:Name> <m:":"> <t:Expr> <c:","> <e:RExpr> => Per::Pi(Typed::new(Pattern::Unit,t), ,Box::new(e)), };
+Sigma:       Per = { "Σ" "(" <v:Name> <m:":"> <t:Expr> <c:","> <e:RExpr> => Per::Sigma(Typed::new(Pattern::Unit,t), ,Box::new(e)), };
+RExpr:       Per = { Variable, Universe, Unit, Lambda, Pi, Sigma, };
+Application: Per = { <l:Expr> <r:RExpr> => Per::Application(Box::new(l),Box::new(r)), };
+pub Expr:    Per = { RExpr, Application };
