@@ -4,15 +4,12 @@ use std::rc::Rc;
 use either::Either;
 
 pub type Level = u32;
-
-
 /// `Exp` in Mini-TT.
 /// Expression language for Mini-TT.
 ///
 /// $M,\ N,\ A,\ B ::=$
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Expression {
-    Universe(i64),
     /// $0$
     Unit,
     /// $\textbf{1}$
@@ -65,7 +62,6 @@ pub enum Expression {
     /// `let bla` or `rec bla`
     Declaration(Box<Declaration>, Box<Self>),
 }
-
 pub type Per = Expression;
 
 /// Just a wrapper for a value but does not do `Eq` comparison.
@@ -100,7 +96,6 @@ pub type GenericBranch<T> = BTreeMap<String, Box<T>>;
 
 /// $S ::= ()\ |\ (\textsf{c}\ M, S)$, Pattern matching branch.
 pub type Branch = GenericBranch<Expression>;
-
 /// This function name is mysterious, but I failed to find a better name. It's for converting a
 /// `Branch` into a `CaseTree` by inserting the `context` to every `Case`s.
 pub fn branch_to_righted(branch: Branch, context: Telescope) -> CaseTree {
@@ -396,12 +391,12 @@ pub type Case = GenericCase<Either<Value, Expression>, Value>;
 /// Case tree.
 pub type CaseTree = GenericBranch<Case>;
 
-// impl GenericCase<Either<Value, Expression>, Value> {
-//     pub fn reduce_to_value(self) -> Value {
-//         let GenericCase {
-//             expression,
-//             context,
-//         } = self;
-//         expression.either(|l| l, |r| r.eval(context))
-//     }
-// }
+impl GenericCase<Either<Value, Expression>, Value>{
+    pub fn reduce_to_value(self) -> Value {
+        let GenericCase {
+            expression,
+            context,
+        } = self;
+        expression.either(|l| l, |r| r.eval(context))
+    }
+}
