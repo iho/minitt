@@ -36,6 +36,7 @@ pub fn check_infer(index: u32, mut tcs: TCS, expression: Expression) -> TCM<Valu
     use crate::ast::Expression::*;
     // change for below usage of `expression`
     match expression.clone() {
+        Universe(n) => Ok(Value::Type(n + 1)),
         Unit => Ok(Value::One),
         Type(level) => Ok(Value::Type(level + 1)),
         Void | One => Ok(Value::Type(0)),

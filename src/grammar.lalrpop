@@ -1,19 +1,18 @@
 use crate::ast::Expression;
-use crate::ast::Per;
 use crate::ast::Branch;
 use crate::ast::Pattern;
 use crate::ast::Typed;
-use crate::grammar::Per;
+use crate::ast::Per;
 
 grammar;
 
 Name:     String = { r"[a-zA-Z_][a-zA-Z_\d]*" => <>.to_string() };
-Universe:    Per = { <n:r"\*[\d]+"> => Per::Universe(i64::from_str_radix(&n[1..],10).unwrap()), <n:r"\*"> => Per::Universe(0), };
+Universe:    Per = { <n:r"\*[\d]+"> => Per::Universe(u32::from_str_radix(&n[1..],10).unwrap()), <n:r"\*"> => Per::Universe(0), };
 Variable:    Per = { <n:Name> => Per::Var(n), };
 Unit:        Per = { <l:"("> <e:Expr> <r:")"> => e, };
-Lambda:      Per = { "λ" "(" <v:Name> <m:":"> <t:Expr> <c:","> <e:RExpr> => Per::Lambda(Pattern::Var(v),None,Box::new(e)), };
-Pi:          Per = { "Π" "(" <v:Name> <m:":"> <t:Expr> <c:","> <e:RExpr> => Per::Pi(Typed::new(Pattern::Unit,t), Box::new(e)), };
-Sigma:       Per = { "Σ" "(" <v:Name> <m:":"> <t:Expr> <c:","> <e:RExpr> => Per::Sigma(Typed::new(Pattern::Unit,t), Box::new(e)), };
+Lambda:      Per = { "λ" "(" <v:Name> <m:":"> <t:Expr> ")" <c:","> <e:RExpr> => Per::Lambda(Pattern::Var(v),None,Box::new(e)), };
+Pi:          Per = { "Π" "(" <v:Name> <m:":"> <t:Expr> ")" <c:","> <e:RExpr> => Per::Pi(Typed::new(Pattern::Unit,t), Box::new(e)), };
+Sigma:       Per = { "Σ" "(" <v:Name> <m:":"> <t:Expr> ")" <c:","> <e:RExpr> => Per::Sigma(Typed::new(Pattern::Unit,t), Box::new(e)), };
 RExpr:       Per = { Variable, Universe, Unit, Lambda, Pi, Sigma, };
 Application: Per = { <l:Expr> <r:RExpr> => Per::Application(Box::new(l),Box::new(r)), };
 pub Expr:    Per = { RExpr, Application };
