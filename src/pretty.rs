@@ -112,7 +112,7 @@ impl Display for Expression {
                 f.write_str(" ++ ")?;
                 rhs.fmt(f)
             }
-            _ => unimplemented!(),
+            Expression::Universe(level) => write!(f, "Universe({})", level),
         }
     }
 }

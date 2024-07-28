@@ -335,6 +335,7 @@ impl Expression {
                 pattern,
                 expression.eval(context),
             )),
+            E::Universe(level) => V::Type(level),
             e => panic!("Cannot eval: {}", e),
         }
     }
