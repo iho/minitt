@@ -281,10 +281,13 @@ impl Expression {
             E::Unit => V::Unit,
             E::One => V::One,
             E::Type(level) => V::Type(level),
-            E::Var(name) => context
+            E::Var(name) => {
+                 dbg!(&context);
+                 context
                 .resolve(&name)
                 .map_err(|err| eprintln!("{}", err))
-                .unwrap(),
+                .unwrap()
+                },
             E::Sum(constructors) => V::Sum(branch_to_righted(constructors, context)),
             E::Merge(left, right) => {
                 let mut left = match left.eval(context.clone()) {

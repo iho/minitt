@@ -99,10 +99,12 @@ pub fn check_infer(index: u32, mut tcs: TCS, expression: Expression) -> TCM<Valu
         }
         Pi(input, output) | Sigma(input, output) => {
             let (left_level, new) = check_type(index, tcs, *input.expression.clone())?;
+            dbg!(&input.pattern);
             tcs = new;
             let input_type = input.expression.eval(tcs.context());
             let generated = generate_for(index, &input_type);
             let gamma = update_gamma(tcs.gamma, &input.pattern, input_type, generated)?;
+            dbg!(gamma.clone());
             let (right_level, _) = check_type(index + 1, TCS::new(gamma, tcs.context), *output)?;
             // Does this need to depend on the level of the return type?
             Ok(Value::Type(max(left_level, right_level)))
