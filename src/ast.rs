@@ -10,6 +10,7 @@ pub type Level = u32;
 /// $M,\ N,\ A,\ B ::=$
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Expression {
+    Universe(Level),
     /// $0$
     Unit,
     /// $\textbf{1}$
