@@ -42,11 +42,12 @@ pub mod decl;
 use self::decl::check_declaration;
 use self::expr::{check, check_infer};
 use self::tcm::{TCM, TCS};
-use crate::ast::{Declaration, Expression, Value};
+use std::rc::Rc;
+use crate::ast::{Declaration, Expression, Value, GenericTelescope};
 
 /// `checkMain` in Mini-TT.
-pub fn check_main<'a>(expression: Expression) -> TCM<TCS<'a>> {
-    check(0, Default::default(), expression, Value::Type(2))
+pub fn check_main(expression: Expression) -> TCM<Value> {
+    check_infer(0, Default::default(), expression) 
 }
 
 /// For REPL: check an expression under an existing context

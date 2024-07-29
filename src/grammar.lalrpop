@@ -9,33 +9,32 @@ grammar;
 
 // Copyright (c) Groupoid Infinity
 
-Name: String =  { r"[a-zA-Z_][a-zA-Z_\d]*" => <>.to_string() };
-Universe: Per = { <n:r"\*[\d]+"> => Per::Type(u32::from_str_radix(&n[1..],10).unwrap()), <n:r"\*"> => Per::Type(0), };
+Name: String = { r"[a-zA-Z_][a-zA-Z_\d]*" => <>.to_string() };
 Variable: Per = { <n:Name> => Per::Var(n), };
+Universe: Per = { <n:r"\*[\d]+"> => Per::Type(u32::from_str_radix(&n[1..],10).unwrap()),
+                  <n:r"\*"> => Per::Type(0), };
 
-Vars: Pattern = {
-   <n:Name> => Pattern::Var(n),
+Vars: Vec<Pattern> = {
+   <n:Name> => vec![Pattern::Var(n)],
    <n:Name> <v:Vars> =>
-       Pattern::Pair(Box::new(Pattern::Var(n)),Box::new(v)), };
+       { let mut r = v.clone();
+         r.append(&mut vec![Pattern::Var(n)]); r }, };
 
 Telescope: Vec<(Pattern,Expression)> = {
-   "(" <v:Vars> <m:":"> <t:Expr> ")" => vec![(v,t)],
+   "(" <v:Vars> <m:":"> <t:Expr> ")" => vec![(v[0].clone(),t)],
    "(" <v:Vars> <m:":"> <t:Expr> ")" <x:Telescope> =>
-       { let mut r = x.clone(); r.append(&mut vec![(v,t)]); r } };
+       { let mut r = x.clone(); r.append(&mut vec![(v[0].clone(),t)]); r } };
 
 Lambda: Per = { "λ" "(" <v:Vars> <m:":"> <t:Expr> ")" <c:","> <e:Exp1> =>
-                        Per::Lambda(v,None,Box::new(e)), };
+                        Per::Lambda(v[0].clone(),None,Box::new(e)), };
+Pi:     Per = { "Π" "(" <v:Vars> <m:":"> <t:Expr> ")" <c:","> <e:Exp1> =>
+                        Per::Pi(Typed::new(v[0].clone(),t), Box::new(e)), };
+Sigma:  Per = { "Σ" "(" <v:Vars> <m:":"> <t:Expr> ")" <c:","> <e:Exp1> =>
+                        Per::Sigma(Typed::new(v[0].clone(),t), Box::new(e)), };
 
-Pi: Per = { "Π" "(" <v:Vars> <m:":"> <t:Expr> ")" <c:","> <e:Exp1> =>
-                    Per::Pi(Typed::new(v,t), Box::new(e)), };
-
-Sigma: Per = { "Σ" "(" <v:Vars> <m:":"> <t:Expr> ")" <c:","> <e:Exp1> =>
-                       Per::Sigma(Typed::new(v,t), Box::new(e)), };
-
-Exp0: Per = { <l:Exp1> "," <r:Exp0> => Per::Pair(Box::new(l),Box::new(r)), <x:Exp1> => x };
 Exp1: Per = { Lambda, Pi, Sigma, Exp2 };
 Exp2: Per = { <l:Exp2> <r:Exp3> => Per::Application(Box::new(l),Box::new(r)), <x:Exp3> => x };
-Exp3: Per = { Universe, Variable, <l:"("> <e:Exp0> <r:")"> => e, };
+Exp3: Per = { Universe, Variable, <l:"("> <e:Exp4> <r:")"> => e, };
+Exp4: Per = { <l:Exp1> "," <r:Exp4> => Per::Pair(Box::new(l),Box::new(r)), <x:Exp1> => x };
 
 pub Expr: Per = { Exp1 };
-
