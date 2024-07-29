@@ -282,6 +282,7 @@ pub fn check(index: u32, mut tcs: TCS, expression: Expression, value: Value) -> 
             check_level(level, check_merge_type(index, tcs, *left, *right)?)
         }
         (E::Sigma(first, second), V::Type(level)) | (E::Pi(first, second), V::Type(level)) => {
+            dbg!("ми тут");
             check_level(level, check_telescoped(index, tcs, first, *second)?)
         }
         (E::Declaration(declaration, rest), rest_type) => {
