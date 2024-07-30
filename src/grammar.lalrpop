@@ -6,9 +6,9 @@ grammar;
 
 // Copyright (c) Groupoid Infinity 2024 Per MLTT-72
 
-// PER = U | [ V : PER ] PER | PER PER
-//     | V | ( V : PER ) PER | ( PER )
-//         | { V : PER } PER | PER , PER
+// PER = U | Π ( V : PER ) , PER | PER PER
+//     | V | λ ( V : PER ) , PER | ( PER )
+//         | Σ ( V : PER ) , PER | PER , PER
 
 Name: String = { r"[a-zA-Z_][a-zA-Z_\d]*" => <>.to_string() };
 Variable: Per = { <n:Name> => Per::Var(n), };
@@ -20,18 +20,18 @@ Vars: Vec<Pattern> = {
    <n:Name> <v:Vars> => { let mut r = v.clone(); r.append(&mut vec![Pattern::Var(n)]); r }, };
 
 Telescope: Vec<(Pattern,Expression)> = {
-   "(" <v:Vars> <m:":"> <t:Expr> ")" => vec![(v[0].clone(),t)],
-   "(" <v:Vars> <m:":"> <t:Expr> ")" <x:Telescope> => { let mut r = x.clone(); r.append(&mut vec![(v[0].clone(),t)]); r } };
+   "(" <v:Vars> ":" <t:Expr> ")" => vec![(v[0].clone(),t)],
+   "(" <v:Vars> ":" <t:Expr> ")" <x:Telescope> => { let mut r = x.clone(); r.append(&mut vec![(v[0].clone(),t)]); r } };
 
-Lambda: Per = { "λ" "(" <v:Vars> <m:":"> <t:Expr> ")" <c:","> <e:Exp1> => Per::Lambda(v[0].clone(),None,Box::new(e)), };
-Forall: Per = { "Π" "(" <v:Vars> <m:":"> <t:Expr> ")" <c:","> <e:Exp1> => Per::Pi(Typed::new(v[0].clone(),t), Box::new(e)), };
-Sigma:  Per = { "Σ" "(" <v:Vars> <m:":"> <t:Expr> ")" <c:","> <e:Exp1> => Per::Sigma(Typed::new(v[0].clone(),t), Box::new(e)), };
+Lambda: Per = { "λ" "(" <v:Vars> ":" <t:Expr> ")" "," <e:Exp1> => Per::Lambda(v[0].clone(),None,Box::new(e)), };
+Forall: Per = { "Π" "(" <v:Vars> ":" <t:Expr> ")" "," <e:Exp1> => Per::Pi(Typed::new(v[0].clone(),t), Box::new(e)), };
+Sigma:  Per = { "Σ" "(" <v:Vars> ":" <t:Expr> ")" "," <e:Exp1> => Per::Sigma(Typed::new(v[0].clone(),t), Box::new(e)), };
 
 // LR(1) Parsing Scheme
 
 Exp1: Per = { Lambda, Forall, Sigma, Exp2 };
 Exp2: Per = { <l:Exp2> <r:Exp3> => Per::Application(Box::new(l),Box::new(r)), Exp3 };
-Exp3: Per = { Universe, Variable, <l:"("> <e:Exp4> <r:")"> => e, };
+Exp3: Per = { Universe, Variable, "(" <e:Exp4> ")" => e, };
 Exp4: Per = { <l:Exp1> "," <r:Exp4> => Per::Pair(Box::new(l),Box::new(r)), Exp1 };
 
 pub Expr: Per = { Exp1 };
