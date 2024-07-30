@@ -1,10 +1,7 @@
 use crate::ast::Expression;
-use crate::ast::Branch;
 use crate::ast::Pattern;
 use crate::ast::Typed;
 use crate::ast::Per;
-use crate::ast::Value;
-
 grammar;
 
 // Copyright (c) Groupoid Infinity
@@ -27,14 +24,14 @@ Telescope: Vec<(Pattern,Expression)> = {
 
 Lambda: Per = { "λ" "(" <v:Vars> <m:":"> <t:Expr> ")" <c:","> <e:Exp1> =>
                         Per::Lambda(v[0].clone(),None,Box::new(e)), };
-Pi:     Per = { "Π" "(" <v:Vars> <m:":"> <t:Expr> ")" <c:","> <e:Exp1> =>
+Forall: Per = { "Π" "(" <v:Vars> <m:":"> <t:Expr> ")" <c:","> <e:Exp1> =>
                         Per::Pi(Typed::new(v[0].clone(),t), Box::new(e)), };
 Sigma:  Per = { "Σ" "(" <v:Vars> <m:":"> <t:Expr> ")" <c:","> <e:Exp1> =>
                         Per::Sigma(Typed::new(v[0].clone(),t), Box::new(e)), };
 
-Exp1: Per = { Lambda, Pi, Sigma, Exp2 };
-Exp2: Per = { <l:Exp2> <r:Exp3> => Per::Application(Box::new(l),Box::new(r)), <x:Exp3> => x };
+Exp1: Per = { Lambda, Forall, Sigma, Exp2 };
+Exp2: Per = { <l:Exp2> <r:Exp3> => Per::Application(Box::new(l),Box::new(r)), Exp3 };
 Exp3: Per = { Universe, Variable, <l:"("> <e:Exp4> <r:")"> => e, };
-Exp4: Per = { <l:Exp1> "," <r:Exp4> => Per::Pair(Box::new(l),Box::new(r)), <x:Exp1> => x };
+Exp4: Per = { <l:Exp1> "," <r:Exp4> => Per::Pair(Box::new(l),Box::new(r)), Exp1 };
 
 pub Expr: Per = { Exp1 };
