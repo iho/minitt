@@ -17,21 +17,17 @@ Universe: Per = { <n:r"\*[\d]+"> => Per::Type(u32::from_str_radix(&n[1..],10).un
 
 Vars: Vec<Pattern> = {
    <n:Name> => vec![Pattern::Var(n)],
-   <n:Name> <v:Vars> =>
-       { let mut r = v.clone();
-         r.append(&mut vec![Pattern::Var(n)]); r }, };
+   <n:Name> <v:Vars> => { let mut r = v.clone(); r.append(&mut vec![Pattern::Var(n)]); r }, };
 
 Telescope: Vec<(Pattern,Expression)> = {
    "(" <v:Vars> <m:":"> <t:Expr> ")" => vec![(v[0].clone(),t)],
-   "(" <v:Vars> <m:":"> <t:Expr> ")" <x:Telescope> =>
-       { let mut r = x.clone(); r.append(&mut vec![(v[0].clone(),t)]); r } };
+   "(" <v:Vars> <m:":"> <t:Expr> ")" <x:Telescope> => { let mut r = x.clone(); r.append(&mut vec![(v[0].clone(),t)]); r } };
 
-Lambda: Per = { "λ" "(" <v:Vars> <m:":"> <t:Expr> ")" <c:","> <e:Exp1> =>
-                        Per::Lambda(v[0].clone(),None,Box::new(e)), };
-Forall: Per = { "Π" "(" <v:Vars> <m:":"> <t:Expr> ")" <c:","> <e:Exp1> =>
-                        Per::Pi(Typed::new(v[0].clone(),t), Box::new(e)), };
-Sigma:  Per = { "Σ" "(" <v:Vars> <m:":"> <t:Expr> ")" <c:","> <e:Exp1> =>
-                        Per::Sigma(Typed::new(v[0].clone(),t), Box::new(e)), };
+Lambda: Per = { "λ" "(" <v:Vars> <m:":"> <t:Expr> ")" <c:","> <e:Exp1> => Per::Lambda(v[0].clone(),None,Box::new(e)), };
+Forall: Per = { "Π" "(" <v:Vars> <m:":"> <t:Expr> ")" <c:","> <e:Exp1> => Per::Pi(Typed::new(v[0].clone(),t), Box::new(e)), };
+Sigma:  Per = { "Σ" "(" <v:Vars> <m:":"> <t:Expr> ")" <c:","> <e:Exp1> => Per::Sigma(Typed::new(v[0].clone(),t), Box::new(e)), };
+
+// LR(1) Parsing Scheme
 
 Exp1: Per = { Lambda, Forall, Sigma, Exp2 };
 Exp2: Per = { <l:Exp2> <r:Exp3> => Per::Application(Box::new(l),Box::new(r)), Exp3 };
