@@ -12,7 +12,6 @@ type Level = u32;
 #[derive(Debug, Clone)]
 pub enum Per {
     Lambda(Box<Pattern>, Box<Per>),
-    ESet,
     Type(Level),
     Pi(Box<Pattern>, Box<Per>, Box<Per>),
     Sigma(Box<Pattern>, Box<Per>, Box<Per>),
@@ -30,7 +29,7 @@ pub type Decl = (Pattern, Per, Per);
 pub enum Value {
     VLam(Clos),
     VPair(Box<Value>, Box<Value>),
-    VSet,
+    VSet(Level),
     VPi(Box<Value>, Clos),
     VSig(Box<Value>, Clos),
     VNt(Neut),
@@ -60,7 +59,7 @@ pub enum Rho {
 pub enum NExp {
     NELam(i32, Box<NExp>),
     NEPair(Box<NExp>, Box<NExp>),
-    NESet,
+    NESet(Level),
     NEPi(Box<NExp>, i32, Box<NExp>),
     NESig(Box<NExp>, i32, Box<NExp>),
     NENt(NNeut),
@@ -113,14 +112,10 @@ fn pat_proj(p: &Pattern, x: &str, v: Value) -> Result<Value, CoreError> {
     match p {
         Pattern::Var(y) if x == y => Ok(v.clone()),
         Pattern::Pair(p1, p2) => {
-            if in_pat(x, p1) {
-                pat_proj(p1, x, vfst(v.clone())?)
-            } else if in_pat(x, p2) {
-                pat_proj(p2, x, vsnd(v.clone())?)
-            } else {
-                Err(CoreError("patProj".to_string()))
-            }
-        }
+           if in_pat(x, p1) { pat_proj(p1, x, vfst(v.clone())?) }
+            else if in_pat(x, p2) { pat_proj(p2, x, vsnd(v.clone())?) }
+            else { Err(CoreError("patProj".to_string())) }
+       }
         _ => Err(CoreError("patProj".to_string())),
     }
 }
@@ -135,8 +130,7 @@ fn l_rho(rho: &Rho) -> i32 {
 
 fn eval(e: &Per, rho: &Rho) -> Result<Value, CoreError> {
     match e {
-        Per::Type(_) => Ok(Value::VSet),
-        Per::ESet => Ok(Value::VSet),
+        Per::Type(level) => Ok(Value::VSet(*level)),
         Per::Declaration(d, e) => eval(e, &Rho::UpDec(Box::new(rho.clone()), (**d).clone())),
         Per::Lambda(p, e) => Ok(Value::VLam(Clos(*(*p).clone(), (**e).clone(), rho.clone()))),
         Per::Pi(p, a, b) => Ok(Value::VPi(Box::new(eval(a, rho)?), Clos(*p.clone(), (**b).clone(), rho.clone()))),
@@ -218,7 +212,7 @@ fn rb_v(k: i32, value: &Value) -> Result<NExp, CoreError> {
     match value {
         Value::VLam(f) => Ok(NExp::NELam(k, Box::new(rb_v(k + 1, &clos_by_val(f.clone(), gen_v(k))?)?))),
         Value::VPair(u, v) => Ok(NExp::NEPair(Box::new(rb_v(k, u)?), Box::new(rb_v(k, v)?))),
-        Value::VSet => Ok(NExp::NESet),
+        Value::VSet(level) => Ok(NExp::NESet(*level)),
         Value::VPi(t, g) => Ok(NExp::NEPi(Box::new(rb_v(k, t)?), k, Box::new(rb_v(k + 1, &clos_by_val(g.clone(), gen_v(k))?)?))),
         Value::VSig(t, g) => Ok(NExp::NESig(Box::new(rb_v(k, t)?), k, Box::new(rb_v(k + 1, &clos_by_val(g.clone(), gen_v(k))?)?))),
         Value::VNt(l) => Ok(NExp::NENt(rb_n(k, l)?)),
@@ -248,6 +242,8 @@ fn eq_nf(i: i32, m1: &Value, m2: &Value) -> Result<(), CoreError> {
     if e1 == e2 {
         Ok(())
     } else {
+        dbg!(e1);
+        dbg!(e2);
         Err(CoreError("eqNf".to_string()))
     }
 }
@@ -281,8 +277,7 @@ fn check_t(k: i32, rho: &Rho, gma: &mut Gamma, e: &Per) -> Result<(), CoreError>
             check_t(k + 1, &Rho::UpVar(Box::new(rho.clone()), *(*p).clone(), Box::new(gen)), gma, b)
         }
         Per::Sigma(p, a, b) => check_t(k, rho, gma, &Per::Pi(p.clone(), a.clone(), b.clone())),
-        Per::ESet => Ok(()),
-        a => check(k, rho, gma, a, &Value::VSet),
+        a => check(k, rho, gma, a, &Value::VSet(0)),
     }
 }
 
@@ -297,14 +292,14 @@ fn check(k: i32, rho: &Rho, gma: &mut Gamma, e0: &Per, t0: &Value) -> Result<(),
             check(k, rho, gma, e1, t)?;
             check(k, rho, gma, e2, &clos_by_val(g.clone(), eval(e1, rho)?)?)
         }
-        (Per::ESet, Value::VSet) => Ok(()),
-        (Per::Pi(p, a, b), Value::VSet) => {
-            check(k, rho, gma, a, &Value::VSet)?;
+        (Per::Type(level), Value::VSet(_)) => Ok(()),
+        (Per::Pi(p, a, b), Value::VSet(_)) => {
+            check(k, rho, gma, a, &Value::VSet(0))?;
             let gen = gen_v(k);
             update(gma, p, &eval(a, rho)?, &gen)?;
-            check(k + 1, &Rho::UpVar(Box::new(rho.clone()), *p.clone(), Box::new(gen.clone())), gma, b, &Value::VSet)
+            check(k + 1, &Rho::UpVar(Box::new(rho.clone()), *p.clone(), Box::new(gen.clone())), gma, b, &Value::VSet(0))
         }
-        (Per::Sigma(p, a, b), Value::VSet) => check(k, rho, gma, &Per::Pi(p.clone(), a.clone(), b.clone()), &Value::VSet),
+        (Per::Sigma(p, a, b), Value::VSet(_)) => check(k, rho, gma, &Per::Pi(p.clone(), a.clone(), b.clone()), &Value::VSet(0)),
         (Per::Declaration(d, e), t) => {
             let gma1 = check_d(k, rho, gma, d)?;
             check(k, &Rho::UpDec(Box::new(rho.clone()), *d.clone()), &mut gma1.clone(), e, t)
@@ -315,6 +310,7 @@ fn check(k: i32, rho: &Rho, gma: &mut Gamma, e0: &Per, t0: &Value) -> Result<(),
 
 fn check_i(k: i32, rho: &Rho, gma: &mut Gamma, e: &Per) -> Result<Value, CoreError> {
     match e {
+        Per::Type(level) => Ok(Value::VSet(*level)),
         Per::Var(x) => lookup(x, gma),
         Per::Application(f, x) => {
             let t1 = check_i(k, rho, gma, f)?;
@@ -348,6 +344,6 @@ fn check_d(k: i32, rho: &Rho, gma: &mut Gamma, d: &Decl) -> Result<Gamma, CoreEr
 }
 
 pub fn check_main(e: &Per) -> Result<(), CoreError> {
-    check(0, &Rho::Nil, &mut Gamma::new(), e, &Value::VSet)
+    check(0, &Rho::Nil, &mut Gamma::new(), e, &Value::VSet(0))
 }
 

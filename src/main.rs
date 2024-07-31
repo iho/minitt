@@ -11,5 +11,5 @@ fn print(s: &str) {
 
 fn main() {
    print("Π (n: *), Σ (x: *), n");
-   print("Σ (y x: *1), (x, x)");
+   print("Σ (y x: *), *");
 }
