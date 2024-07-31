@@ -1,403 +1,353 @@
-use std::collections::BTreeMap;
-use std::rc::Rc;
+type Name = String;
 
-use either::Either;
-
-pub type Level = u32;
-/// `Exp` in Mini-TT.
-/// Expression language for Mini-TT.
-///
-/// $M,\ N,\ A,\ B ::=$
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum Expression {
-    Universe(Level),
-    /// $0$
-    Unit,
-    /// $\textbf{1}$
-    One,
-    /// $\textsf{U}$,
-    /// `Type`. Extended with levels.
-    Type(Level),
-    /// Empty file
-    Void,
-    /// $x$,
-    /// `bla`
-    Var(String),
-    /// $\textsf{Sum} \ S$,
-    /// `Sum { Bla x }`
-    Sum(Branch),
-    /// $\textsf{fun} \ S$,
-    /// `split { Bla x => y }`
-    Split(Branch),
-    /// This is an extension to Mini-TT, `A ++ B`.
-    Merge(Box<Self>, Box<Self>),
-    /// $\Pi p : A. B$ or $A \rightarrow B$,
-    /// `\Pi a: b. c` or `A -> B`
-    Pi(Typed, Box<Self>),
-    /// $\Sigma p : A. B$ or $A \times B$,
-    /// `\Sigma a: b. c` or `A * B`
-    Sigma(Typed, Box<Self>),
-    /// $\lambda p. M$,
-    /// `\lambda a. c`, the optional value is the type of the argument.<br/>
-    /// This cannot be specified during parsing because it's used for generated intermediate values
-    /// during type-checking.
-    Lambda(Pattern, Option<AnonymousValue>, Box<Self>),
-    /// $M.1$,
-    /// `bla.1`
-    First(Box<Self>),
-    /// $M.2$,
-    /// `bla.2`
-    Second(Box<Self>),
-    /// $M \ N$,
-    /// `f a`
-    Application(Box<Self>, Box<Self>),
-    /// $M, N$,
-    /// `a, b`
-    Pair(Box<Self>, Box<Self>),
-    /// $\textsf{c}\ M$, `Cons a`
-    Constructor(String, Box<Self>),
-    /// `const a = b`, this is an extension: a declaration whose type-signature is inferred.
-    /// This is very similar to a `Declaration`.
-    Constant(Pattern, Box<Self>, Box<Self>),
-    /// $D; M$,
-    /// `let bla` or `rec bla`
-    Declaration(Box<Declaration>, Box<Self>),
-}
-pub type Per = Expression;
-
-/// Just a wrapper for a value but does not do `Eq` comparison.
-/// This is an implementation detail and should not be noticed much when reading the source code.
 #[derive(Debug, Clone)]
-pub struct AnonymousValue {
-    pub internal: Box<Value>,
+pub enum Pattern {
+    Pair(Box<Pattern>, Box<Pattern>),
+    Unit,
+    Var(Name),
 }
 
-impl AnonymousValue {
-    pub fn new(value: Value) -> Self {
-        Self {
-            internal: Box::new(value),
-        }
-    }
 
-    pub fn some(value: Value) -> Option<Self> {
-        Some(Self::new(value))
-    }
+type Level = u32;
+#[derive(Debug, Clone)]
+pub enum Per {
+    Lambda(Box<Pattern>, Box<Per>),
+    ESet,
+    Type(Level),
+    Pi(Box<Pattern>, Box<Per>, Box<Per>),
+    Sigma(Box<Pattern>, Box<Per>, Box<Per>),
+    Pair(Box<Per>, Box<Per>),
+    First(Box<Per>),
+    Second(Box<Per>),
+    Application(Box<Per>, Box<Per>),
+    Var(Name),
+    Declaration(Box<Decl>, Box<Per>),
 }
 
-impl Eq for AnonymousValue {}
+pub type Decl = (Pattern, Per, Per);
 
-impl PartialEq<AnonymousValue> for AnonymousValue {
-    fn eq(&self, _other: &Self) -> bool {
-        true
-    }
-}
-
-/// $S(M) ::= ()\ |\ (\textsf{c}\ M, S)$
-pub type GenericBranch<T> = BTreeMap<String, Box<T>>;
-
-/// $S ::= ()\ |\ (\textsf{c}\ M, S)$, Pattern matching branch.
-pub type Branch = GenericBranch<Expression>;
-/// This function name is mysterious, but I failed to find a better name. It's for converting a
-/// `Branch` into a `CaseTree` by inserting the `context` to every `Case`s.
-pub fn branch_to_righted(branch: Branch, context: Telescope) -> CaseTree {
-    let mut case_tree: CaseTree = Default::default();
-    for (name, expression) in branch.into_iter() {
-        let case = GenericCase::new(Either::Right(*expression), context.clone());
-        case_tree.insert(name, Box::new(case));
-    }
-    case_tree
-}
-
-/// $p:A$, Pattern with type explicitly specified.
-/// This is just a helper struct.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Typed {
-    pub pattern: Pattern,
-    pub expression: Box<Expression>,
-}
-
-impl Typed {
-    pub fn new(pattern: Pattern, expression: Expression) -> Self {
-        Self {
-            pattern,
-            expression: Box::new(expression),
-        }
-    }
-
-    pub fn destruct(self) -> (Pattern, Expression) {
-        let pattern = self.pattern;
-        let expression = *self.expression;
-        (pattern, expression)
-    }
-}
-
-/// `Val` in Mini-TT, value term.<br/>
-/// Terms are either of canonical form or neutral form.
-///
-/// $u,v,t ::=$
 #[derive(Debug, Clone)]
 pub enum Value {
-    /// $\lambda\ f$.
-    /// Canonical form: lambda abstraction.
-    Lambda(Closure),
-    /// $0$.
-    /// Canonical form: unit instance.
-    Unit,
-    /// $\textbf{1}$.
-    /// Canonical form: unit type.
-    One,
-    /// $\textsf{U}$.
-    /// Canonical form: type universe.
-    Type(Level),
-    /// $\Pi \ t\ g$.
-    /// Canonical form: pi type (type for dependent functions).
-    Pi(Box<Self>, Closure),
-    /// $\Sigma \ t\ g$.
-    /// Canonical form: sigma type (type for dependent pair).
-    Sigma(Box<Self>, Closure),
-    /// $u,v$.
-    /// Canonical form: Pair value (value for sigma).
-    Pair(Box<Self>, Box<Self>),
-    /// $c \ t$.
-    /// Canonical form: call to a constructor.
-    Constructor(String, Box<Self>),
-    /// $\textsf{fun}\ s$.
-    /// Canonical form: case-split.
-    Split(CaseTree),
-    /// $\textsf{Sum}\ s$.
-    /// Canonical form: sum type.
-    Sum(CaseTree),
-    /// $[k]$.
-    /// Neutral form.
-    Neutral(Neutral),
+    VLam(Clos),
+    VPair(Box<Value>, Box<Value>),
+    VSet,
+    VPi(Box<Value>, Clos),
+    VSig(Box<Value>, Clos),
+    VNt(Neut),
 }
 
-/// Generic definition for two kinds of neutral terms.
-///
-/// Implementing `Eq` because of `NormalExpression`.
-///
-/// $k(v) ::=$
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum GenericNeutral<Value: Clone> {
-    /// $\textsf{x}_n$.
-    /// Neutral form: stuck on a free variable.
-    Generated(u32),
-    /// $k\ v$.
-    /// Neutral form: stuck on applying on a free variable.
-    Application(Box<Self>, Box<Value>),
-    /// $k.1$.
-    /// Neutral form: stuck on trying to find the first element of a free variable.
-    First(Box<Self>),
-    /// $k.2$.
-    /// Neutral form: stuck on trying to find the second element of a free variable.
-    Second(Box<Self>),
-    /// $s\ k$.
-    /// Neutral form: stuck on trying to case-split a free variable.
-    Split(
-        GenericBranch<GenericCase<Either<Value, Expression>, Value>>,
-        Box<Self>,
-    ),
-}
-
-/// $k ::= k(v)$.
-/// `Neut` in Mini-TT, neutral value.
-pub type Neutral = GenericNeutral<Value>;
-
-/// `Patt` in Mini-TT.
-///
-/// $p ::=$
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub enum Pattern {
-    /// $p,p$,
-    /// Pair pattern. This sounds like trivial and useless, but we can achieve mutual recursion by
-    /// using this pattern.
-    Pair(Box<Self>, Box<Self>),
-    /// \_,
-    /// Unit pattern, used for introducing anonymous definitions.
-    Unit,
-    /// $x$,
-    /// Variable name pattern, the most typical pattern.
-    Var(String),
-}
-
-/// `Decl` in Mini-TT.
-/// $D ::= p:A=M\ |\ \textsf{rec}\ p:A=M$
-///
-/// It's supposed to be an `enum` because it can be rec or non-rec, but for
-/// coding convenience I've made it a struct with a `bool` member
-/// (`is_recursive`) to indicate whether it's recursive.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Declaration {
-    /// $p$ in syntax.
-    pub pattern: Pattern,
-    /// This is an extension -- declarations can be prefixed with some parameters.
-    pub prefix_parameters: Vec<Typed>,
-    /// $A$ in syntax.
-    pub signature: Expression,
-    /// $M$ in syntax.
-    pub body: Expression,
-    /// Whether the $\textsf{rec}$ is present.
-    pub is_recursive: bool,
-}
-
-impl Declaration {
-    /// Constructor
-    pub fn new(
-        pattern: Pattern,
-        prefix_parameters: Vec<Typed>,
-        signature: Expression,
-        body: Expression,
-        is_recursive: bool,
-    ) -> Self {
-        Self {
-            pattern,
-            prefix_parameters,
-            signature,
-            body,
-            is_recursive,
-        }
-    }
-
-    /// Non-recursive declarations
-    pub fn simple(
-        pattern: Pattern,
-        prefix_parameters: Vec<Typed>,
-        signature: Expression,
-        body: Expression,
-    ) -> Self {
-        Self::new(pattern, prefix_parameters, signature, body, false)
-    }
-
-    /// Recursive declarations
-    pub fn recursive(
-        pattern: Pattern,
-        prefix_parameters: Vec<Typed>,
-        signature: Expression,
-        body: Expression,
-    ) -> Self {
-        Self::new(pattern, prefix_parameters, signature, body, true)
-    }
-}
-
-/// Generic definition for two kinds of telescopes.<br/>
-/// `Value` can be specialized with `Value` or `NormalExpression`.
-///
-/// Implementing `Eq` because of `NormalExpression`
-// TODO: replace with Vec<enum {Dec, Var}> maybe?
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum GenericTelescope<Value: Clone> {
-    /// $()$,
-    /// Empty telescope.
-    Nil,
-    /// $\rho, p=D$,
-    /// In Mini-TT, checked declarations are put here. However, it's not possible to store a
-    /// recursive declaration as an `Expression` (which is a member of `Declaration`) here.
-    ///
-    /// The problem is quite complicated and can be reproduced by checking out 0.1.5 revision and
-    /// type-check this code (`Type` was `U` and `Sum` was `sum` at that time):
-    ///
-    /// ```ignore
-    /// rec nat : U = sum { Zero 1 | Suc nat };
-    /// -- Inductive definition of nat
-    ///
-    /// let one : nat = Zero 0;
-    /// let two : nat = Suc one;
-    /// -- Unresolved reference
-    /// ```
-    UpDec(Rc<Self>, Declaration),
-    /// $\rho, p=v$,
-    /// Usually a local variable, introduced in your telescope
-    UpVar(Rc<Self>, Pattern, Value),
-}
-
-pub type TelescopeRc<Value> = Rc<GenericTelescope<Value>>;
-
-/// $\rho ::= \rho(v)$
-/// `Rho` in Mini-TT, dependent context.
-pub type Telescope = Rc<GenericTelescope<Value>>;
-
-/// Just for simplifying constructing an `Rc`.
-/// $\rho, p=v$
-pub fn up_var_rc<Value: Clone>(
-    me: TelescopeRc<Value>,
-    pattern: Pattern,
-    value: Value,
-) -> TelescopeRc<Value> {
-    Rc::new(GenericTelescope::UpVar(me, pattern, value))
-}
-
-/// Just for simplifying constructing an `Rc`.
-/// $\rho, p=D$
-pub fn up_dec_rc<Value: Clone>(
-    me: TelescopeRc<Value>,
-    declaration: Declaration,
-) -> TelescopeRc<Value> {
-    Rc::new(GenericTelescope::UpDec(me, declaration))
-}
-
-/// Because we can't `impl` a `Default` for `Rc`.
-/// $()$
-pub fn nil_rc<Value: Clone>() -> TelescopeRc<Value> {
-    Rc::new(GenericTelescope::Nil)
-}
-
-/// `Clos` in Mini-TT.
-///
-/// $f,g ::=$
 #[derive(Debug, Clone)]
-pub enum Closure {
-    /// $\lang \lambda p.M,\rho \rang$,
-    /// `cl` in Mini-TT.<br/>
-    /// Closure that does a pattern matching.
-    ///
-    /// Members: pattern, parameter type (optional), body expression and the captured scope.
-    Abstraction(Pattern, Option<Box<Value>>, Expression, Box<Telescope>),
-    /// This is not present in Mini-TT, thus an extension.<br/>
-    /// Sometimes the closure is already an evaluated value.
-    Value(Box<Value>),
-    /// $f \circ c$
-    /// `clCmp` in Mini-TT.<br/>
-    /// Closure that was inside of a case-split.
-    ///
-    /// For example, in a definition:
-    /// ```ignore
-    /// f = split { TT a => bla };
-    /// ```
-    /// The part `TT a => bla` is a choice closure, where `Box<Self>` refers to the `a => bla` part
-    /// and `TT` is the `String`.
-    Choice(Box<Self>, String),
+pub enum Neut {
+    NGen(i32),
+    NApp(Box<Neut>, Box<Value>),
+    NFst(Box<Neut>),
+    NSnd(Box<Neut>),
 }
 
-/// Generic definition for three kinds of case trees
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct GenericCase<Expression, Value: Clone> {
-    pub expression: Expression,
-    pub context: TelescopeRc<Value>,
+
+#[derive(Debug, Clone)]
+pub struct  Clos(Pattern, Per, Rho);
+
+#[derive(Debug, Clone)]
+pub enum Rho {
+    Nil,
+    UpVar(Box<Rho>, Pattern, Box<Value>),
+    UpDec(Box<Rho>, Decl),
 }
 
-impl<Expression, Value: Clone> GenericCase<Expression, Value> {
-    pub fn new(expression: Expression, context: TelescopeRc<Value>) -> Self {
-        Self {
-            expression,
-            context,
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum NExp {
+    NELam(i32, Box<NExp>),
+    NEPair(Box<NExp>, Box<NExp>),
+    NESet,
+    NEPi(Box<NExp>, i32, Box<NExp>),
+    NESig(Box<NExp>, i32, Box<NExp>),
+    NENt(NNeut),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum NNeut {
+    NtGen(i32),
+    NtApp(Box<NNeut>, Box<NExp>),
+    NtFst(Box<NNeut>),
+    NtSnd(Box<NNeut>),
+}
+
+#[derive(Debug, Clone)]
+pub enum NRho {
+    Nil,
+    UpVar(Box<NRho>, Pattern, Box<NExp>),
+    UpDec(Box<NRho>, Decl),
+}
+
+
+#[derive(Debug, Clone)]
+pub struct CoreError(String);
+
+fn vfst(value: Value) -> Result<Value, CoreError> {
+    match value {
+        Value::VPair(u, _) => Ok(*u),
+        Value::VNt(k) => Ok(Value::VNt(Neut::NFst(Box::new(k)))),
+        _ => Err(CoreError("vfst".to_string())),
+    }
+}
+
+fn vsnd(value: Value) -> Result<Value, CoreError> {
+    match value {
+        Value::VPair(_, u) => Ok(*u),
+        Value::VNt(k) => Ok(Value::VNt(Neut::NSnd(Box::new(k)))),
+        _ => Err(CoreError("vsnd".to_string())),
+    }
+}
+
+fn in_pat(x: &str, patt: &Pattern) -> bool {
+    match patt {
+        Pattern::Unit => false,
+        Pattern::Var(y) => x == y,
+        Pattern::Pair(p1, p2) => in_pat(x, p1) || in_pat(x, p2),
+    }
+}
+
+fn pat_proj(p: &Pattern, x: &str, v: Value) -> Result<Value, CoreError> {
+    match p {
+        Pattern::Var(y) if x == y => Ok(v.clone()),
+        Pattern::Pair(p1, p2) => {
+            if in_pat(x, p1) {
+                pat_proj(p1, x, vfst(v.clone())?)
+            } else if in_pat(x, p2) {
+                pat_proj(p2, x, vsnd(v.clone())?)
+            } else {
+                Err(CoreError("patProj".to_string()))
+            }
         }
+        _ => Err(CoreError("patProj".to_string())),
     }
 }
 
-/// One single case in case trees.
-pub type Case = GenericCase<Either<Value, Expression>, Value>;
-
-/// $\lang S,\rho \rang$,
-/// `SClos` in Mini-TT.<br/>
-/// Case tree.
-pub type CaseTree = GenericBranch<Case>;
-
-impl GenericCase<Either<Value, Expression>, Value>{
-    pub fn reduce_to_value(self) -> Value {
-        let GenericCase {
-            expression,
-            context,
-        } = self;
-        expression.either(|l| l, |r| r.eval(context))
+fn l_rho(rho: &Rho) -> i32 {
+    match rho {
+        Rho::Nil => 0,
+        Rho::UpVar(r, _, _) => l_rho(r) + 1,
+        Rho::UpDec(r, _) => l_rho(r) + 1,
     }
 }
+
+fn eval(e: &Per, rho: &Rho) -> Result<Value, CoreError> {
+    match e {
+        Per::Type(_) => Ok(Value::VSet),
+        Per::ESet => Ok(Value::VSet),
+        Per::Declaration(d, e) => eval(e, &Rho::UpDec(Box::new(rho.clone()), (**d).clone())),
+        Per::Lambda(p, e) => Ok(Value::VLam(Clos(*(*p).clone(), (**e).clone(), rho.clone()))),
+        Per::Pi(p, a, b) => Ok(Value::VPi(Box::new(eval(a, rho)?), Clos(*p.clone(), (**b).clone(), rho.clone()))),
+        Per::Sigma(p, a, b) => Ok(Value::VSig(Box::new(eval(a, rho)?), Clos(*p.clone(), (**b).clone(), rho.clone()))),
+        Per::First(e) => vfst(eval(e, rho)?),
+        Per::Second(e) => vsnd(eval(e, rho)?),
+        Per::Application(f, x) => app(eval(f, rho)?, eval(x, rho)?),
+        Per::Var(x) => get_rho(rho, x),
+        Per::Pair(e1, e2) => Ok(Value::VPair(Box::new(eval(e1, rho)?), Box::new(eval(e2, rho)?))),
+    }
+}
+
+fn app(v1: Value, v2: Value) -> Result<Value, CoreError> {
+    match (v1, v2) {
+        (Value::VLam(f), v) => clos_by_val(f, v),
+        (Value::VNt(k), m) => Ok(Value::VNt(Neut::NApp(Box::new(k), Box::new(m)))),
+        _ => Err(CoreError("app".to_string())),
+    }
+}
+
+fn clos_by_val(x: Clos, v: Value) -> Result<Value, CoreError> {
+    eval(&x.1, &Rho::UpVar(Box::new(x.2),x.0, Box::new(v)))
+}
+
+fn get_rho(rho0: &Rho, x: &str) -> Result<Value, CoreError> {
+    match rho0 {
+        Rho::UpVar(rho, p, v) => {
+            if in_pat(x, p) {
+                pat_proj(p, x, *v.clone())
+            } else {
+                get_rho(rho, x)
+            }
+        }
+        Rho::UpDec(rho, (p, _, e)) => {
+            if in_pat(x, p) {
+                pat_proj(p, x, eval(e, rho0)?)
+            } else {
+                get_rho(rho, x)
+            }
+        }
+        _ => Err(CoreError("getRho".to_string())),
+    }
+}
+
+type Gamma = std::collections::HashMap<String, Value>;
+
+fn lookup(s: &str, lst: &Gamma) -> Result<Value, CoreError> {
+    lst.get(s).cloned().ok_or_else(|| CoreError(format!("lookup {}", s)))
+}
+
+fn show_exp(e: &Per) -> String{
+    format!("{:?}", e)
+}
+
+fn show_patt(p: &Pattern) -> String{
+    format!("{:?}", p)
+}
+
+fn update(gma: &mut Gamma, p: &Pattern, v1: &Value, v2: &Value) -> Result<(), CoreError> {
+    match (p, v1, v2) {
+        (Pattern::Unit, _, _) => Ok(()),
+        (Pattern::Var(x), t, _) => {
+            gma.insert(x.clone(), t.clone());
+            Ok(())
+        }
+        (Pattern::Pair(p1, p2), Value::VSig(t, g), v) => {
+            update(gma, p1, t, &vfst(v.clone())?)?;
+            update(gma, p2, &clos_by_val(g.clone(), vfst(v.clone())?)?, &vsnd(v.clone())?)
+        }
+        (p, _, _) => Err(CoreError(format!("update: p = {}", show_patt(p)))),
+    }
+}
+
+fn gen_v(k: i32) -> Value {
+    Value::VNt(Neut::NGen(k))
+}
+
+fn rb_v(k: i32, value: &Value) -> Result<NExp, CoreError> {
+    match value {
+        Value::VLam(f) => Ok(NExp::NELam(k, Box::new(rb_v(k + 1, &clos_by_val(f.clone(), gen_v(k))?)?))),
+        Value::VPair(u, v) => Ok(NExp::NEPair(Box::new(rb_v(k, u)?), Box::new(rb_v(k, v)?))),
+        Value::VSet => Ok(NExp::NESet),
+        Value::VPi(t, g) => Ok(NExp::NEPi(Box::new(rb_v(k, t)?), k, Box::new(rb_v(k + 1, &clos_by_val(g.clone(), gen_v(k))?)?))),
+        Value::VSig(t, g) => Ok(NExp::NESig(Box::new(rb_v(k, t)?), k, Box::new(rb_v(k + 1, &clos_by_val(g.clone(), gen_v(k))?)?))),
+        Value::VNt(l) => Ok(NExp::NENt(rb_n(k, l)?)),
+    }
+}
+
+fn rb_n(i: i32, neut: &Neut) -> Result<NNeut, CoreError> {
+    match neut {
+        Neut::NGen(j) => Ok(NNeut::NtGen(*j)),
+        Neut::NApp(k, m) => Ok(NNeut::NtApp(Box::new(rb_n(i, k)?), Box::new(rb_v(i, m)?))),
+        Neut::NFst(k) => Ok(NNeut::NtFst(Box::new(rb_n(i, k)?))),
+        Neut::NSnd(k) => Ok(NNeut::NtSnd(Box::new(rb_n(i, k)?))),
+    }
+}
+
+fn rb_rho(i: i32, rho: &Rho) -> NRho {
+    match rho {
+        Rho::Nil => NRho::Nil,
+        Rho::UpVar(rho, p, v) => NRho::UpVar(Box::new(rb_rho(i, rho)), p.clone(), Box::new(rb_v(i, v).unwrap())),
+        Rho::UpDec(rho, d) => NRho::UpDec(Box::new(rb_rho(i, rho)), d.clone()),
+    }
+}
+
+fn eq_nf(i: i32, m1: &Value, m2: &Value) -> Result<(), CoreError> {
+    let e1 = rb_v(i, m1)?;
+    let e2 = rb_v(i, m2)?;
+    if e1 == e2 {
+        Ok(())
+    } else {
+        Err(CoreError("eqNf".to_string()))
+    }
+}
+
+fn show_val(u: &Value) -> String {
+    format!("{:?}", u)
+}
+
+fn ext_pi_g(value: &Value) -> Result<(&Value, &Clos), CoreError> {
+    if let Value::VPi(t, g) = value {
+        Ok((t, g))
+    } else {
+        Err(CoreError(format!("extPiG {}", show_val(value))))
+    }
+}
+
+fn ext_sig_g(value: &Value) -> Result<(&Value, &Clos), CoreError> {
+    if let Value::VSig(t, g) = value {
+        Ok((t, g))
+    } else {
+        Err(CoreError(format!("extSigG {}", show_val(value))))
+    }
+}
+
+fn check_t(k: i32, rho: &Rho, gma: &mut Gamma, e: &Per) -> Result<(), CoreError> {
+    match e {
+        Per::Pi(p, a, b) => {
+            check_t(k, rho, gma, a)?;
+            let gen = gen_v(k);
+            update(gma, p, &eval(a, rho)?, &gen)?;
+            check_t(k + 1, &Rho::UpVar(Box::new(rho.clone()), *(*p).clone(), Box::new(gen)), gma, b)
+        }
+        Per::Sigma(p, a, b) => check_t(k, rho, gma, &Per::Pi(p.clone(), a.clone(), b.clone())),
+        Per::ESet => Ok(()),
+        a => check(k, rho, gma, a, &Value::VSet),
+    }
+}
+
+fn check(k: i32, rho: &Rho, gma: &mut Gamma, e0: &Per, t0: &Value) -> Result<(), CoreError> {
+    match (e0, t0) {
+        (Per::Lambda(p, e), Value::VPi(t, g)) => {
+            let gen = gen_v(k);
+            update(gma, p, t, &gen)?;
+            check(k + 1, &Rho::UpVar(Box::new(rho.clone()), *(*p).clone(), Box::new(gen.clone())), gma, e, &clos_by_val(g.clone(), gen)?)
+        }
+        (Per::Pair(e1, e2), Value::VSig(t, g)) => {
+            check(k, rho, gma, e1, t)?;
+            check(k, rho, gma, e2, &clos_by_val(g.clone(), eval(e1, rho)?)?)
+        }
+        (Per::ESet, Value::VSet) => Ok(()),
+        (Per::Pi(p, a, b), Value::VSet) => {
+            check(k, rho, gma, a, &Value::VSet)?;
+            let gen = gen_v(k);
+            update(gma, p, &eval(a, rho)?, &gen)?;
+            check(k + 1, &Rho::UpVar(Box::new(rho.clone()), *p.clone(), Box::new(gen.clone())), gma, b, &Value::VSet)
+        }
+        (Per::Sigma(p, a, b), Value::VSet) => check(k, rho, gma, &Per::Pi(p.clone(), a.clone(), b.clone()), &Value::VSet),
+        (Per::Declaration(d, e), t) => {
+            let gma1 = check_d(k, rho, gma, d)?;
+            check(k, &Rho::UpDec(Box::new(rho.clone()), *d.clone()), &mut gma1.clone(), e, t)
+        }
+        (e, t) => eq_nf(k, t, &check_i(k, rho, gma, e)?),
+    }
+}
+
+fn check_i(k: i32, rho: &Rho, gma: &mut Gamma, e: &Per) -> Result<Value, CoreError> {
+    match e {
+        Per::Var(x) => lookup(x, gma),
+        Per::Application(f, x) => {
+            let t1 = check_i(k, rho, gma, f)?;
+            let (t, g) = ext_pi_g(&t1)?;
+            check(k, rho, gma, x, t)?;
+            clos_by_val(g.clone(), eval(x, rho)?)
+        }
+        Per::First(e) => {
+            let t = check_i(k, rho, gma, e)?;
+            Ok(ext_sig_g(&t)?.0.clone())
+        }
+        Per::Second(e) => {
+            let t = check_i(k, rho, gma, e)?;
+            let (_, g) = ext_sig_g(&t)?;
+            clos_by_val(g.clone(), eval(e, rho)?)
+        }
+        e => Err(CoreError(format!("checkI: {}", show_exp(e)))),
+    }
+}
+
+fn check_d(k: i32, rho: &Rho, gma: &mut Gamma, d: &Decl) -> Result<Gamma, CoreError> {
+    let (p, a, e) = d;
+    check_t(k, rho, gma, a)?;
+    let t = eval(a, rho)?;
+    let gen = gen_v(k);
+    update(gma, p, &t, &gen)?;
+    check(k + 1, &Rho::UpVar(Box::new(rho.clone()), p.clone(), Box::new(gen.clone())), gma, e, &t)?;
+    let v = eval(e, &Rho::UpDec(Box::new(rho.clone()), d.clone()))?;
+    update(gma, p, &t, &v)?;
+    Ok(gma.clone())
+}
+
+pub fn check_main(e: &Per) -> Result<(), CoreError> {
+    check(0, &Rho::Nil, &mut Gamma::new(), e, &Value::VSet)
+}
+
