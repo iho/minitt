@@ -112,10 +112,10 @@ fn pat_proj(p: &Pattern, x: &str, v: Value) -> Result<Value, CoreError> {
     match p {
         Pattern::Var(y) if x == y => Ok(v.clone()),
         Pattern::Pair(p1, p2) => {
-            if in_pat(x, p1) { pat_proj(p1, x, vfst(v.clone())?) }
+           if in_pat(x, p1) { pat_proj(p1, x, vfst(v.clone())?) }
             else if in_pat(x, p2) { pat_proj(p2, x, vsnd(v.clone())?) }
             else { Err(CoreError("patProj".to_string())) }
-        }
+       }
         _ => Err(CoreError("patProj".to_string())),
     }
 }
@@ -277,7 +277,6 @@ fn check_t(k: i32, rho: &Rho, gma: &mut Gamma, e: &Per) -> Result<(), CoreError>
             check_t(k + 1, &Rho::UpVar(Box::new(rho.clone()), *(*p).clone(), Box::new(gen)), gma, b)
         }
         Per::Sigma(p, a, b) => check_t(k, rho, gma, &Per::Pi(p.clone(), a.clone(), b.clone())),
-//        Per::Type(level) => Ok(()),
         a => check(k, rho, gma, a, &Value::VSet(0)),
     }
 }
@@ -345,6 +344,6 @@ fn check_d(k: i32, rho: &Rho, gma: &mut Gamma, d: &Decl) -> Result<Gamma, CoreEr
 }
 
 pub fn check_main(e: &Per) -> Result<(), CoreError> {
-    check(0, &Rho::Nil, &mut Gamma::new(), e, &Value::VSet(1))
+    check(0, &Rho::Nil, &mut Gamma::new(), e, &Value::VSet(0))
 }
 
